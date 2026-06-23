@@ -1,0 +1,355 @@
+### Data Loading & Exploratory Data Analysis 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Load Dataset
+df = pd.read_csv("Country-data.csv")
+
+# Basic Information
+print("Dataset Shape:")
+print(df.shape)
+
+print("\nFirst Five Rows:")
+print(df.head())
+
+print("\nData Types:")
+print(df.dtypes)
+
+# Missing Values
+print("\nMissing Values:")
+print(df.isnull().sum())
+
+# Duplicate Records
+print("\nDuplicate Records:")
+print(df.duplicated().sum())
+
+# Histograms
+df.drop('country', axis=1).hist(
+    figsize=(15,10),
+    bins=20
+)
+plt.suptitle("Feature Distributions")
+plt.tight_layout()
+plt.show()
+
+# Boxplots
+for col in df.columns[1:]:
+
+    plt.figure(figsize=(7,3))
+
+    sns.boxplot(
+        x=df[col]
+    )
+
+    plt.title(f"Boxplot of {col}")
+
+    plt.show()
+
+# Correlation Matrix
+corr_matrix = df.drop(
+    'country',
+    axis=1
+).corr()
+
+plt.figure(figsize=(10,8))
+
+sns.heatmap(
+    corr_matrix,
+    annot=True,
+    cmap='coolwarm'
+)
+
+plt.title("Correlation Heatmap")
+
+plt.show()
+
+### Task 2
+from sklearn.preprocessing import StandardScaler
+import numpy as np
+
+countries = df['country']
+
+X = df.drop(
+    'country',
+    axis=1
+)
+
+print("Skewness Before Transformation")
+print(X.skew())
+
+X['income'] = np.log1p(X['income'])
+X['gdpp'] = np.log1p(X['gdpp'])
+
+print("\nSkewness After Transformation")
+print(X.skew())
+
+scaler = StandardScaler()
+
+X_scaled = scaler.fit_transform(X)
+
+print("Scaled Data Shape:")
+print(X_scaled.shape)
+
+Task 3
+from sklearn.neighbors import NearestNeighbors
+from sklearn.cluster import DBSCAN
+from sklearn.metrics import silhouette_score
+
+neighbors = NearestNeighbors(
+    n_neighbors=5
+)
+
+neighbors_fit = neighbors.fit(X_scaled)
+
+distances, indices = neighbors_fit.kneighbors(X_scaled)
+
+distances = np.sort(
+    distances[:,4]
+)
+
+plt.figure(figsize=(8,5))
+
+plt.plot(distances)
+
+plt.xlabel("Points")
+plt.ylabel("5-NN Distance")
+plt.title("K-Distance Plot")
+
+plt.show()
+
+eps_values = [0.7,0.9,1.1,1.3]
+min_samples_values = [3,5,7]
+
+results = []
+
+for eps in eps_values:
+
+    for ms in min_samples_values:
+
+        model = DBSCAN(
+            eps=eps,
+            min_samples=ms
+        )
+
+        labels = model.fit_predict(
+            X_scaled
+        )
+
+        clusters = len(
+            set(labels)
+        ) - (
+            1 if -1 in labels else 0
+        )
+
+        noise = list(labels).count(-1)
+
+        if clusters > 1:
+
+            mask = labels != -1
+
+            score = silhouette_score(
+                X_scaled[mask],
+                labels[mask]
+            )
+
+        else:
+
+            score = None
+
+        results.append([
+            eps,
+            ms,
+            clusters,
+            noise,
+            score
+        ])
+
+results_df = pd.DataFrame(
+    results,
+    columns=[
+        'eps',
+        'min_samples',
+        'clusters',
+        'noise',
+        'silhouette'
+    ]
+)
+
+print(results_df)
+
+Task 4
+from sklearn.cluster import DBSCAN
+from sklearn.metrics import silhouette_score
+
+dbscan = DBSCAN(
+    eps=1.3,
+    min_samples=5
+)
+
+labels = dbscan.fit_predict(
+    X_scaled
+)
+
+df['Cluster'] = labels
+
+n_clusters = len(
+    set(labels)
+) - (
+    1 if -1 in labels else 0
+)
+
+noise_points = list(
+    labels
+).count(-1)
+
+print("Total Clusters:", n_clusters)
+
+print("Noise Points:", noise_points)
+
+for cluster in sorted(
+    df['Cluster'].unique()
+):
+
+    print(
+        f"\nCluster {cluster}"
+    )
+
+    countries_list = df[
+        df['Cluster']==cluster
+    ]['country'].tolist()
+
+    print(countries_list)
+
+mask = labels != -1
+
+score = silhouette_score(
+    X_scaled[mask],
+    labels[mask]
+)
+
+print(
+    "\nSilhouette Score:",
+    score
+)
+
+Task 5
+from sklearn.decomposition import PCA
+from mpl_toolkits.mplot3d import Axes3D
+
+pca = PCA(
+    n_components=2
+)
+
+X_pca = pca.fit_transform(
+    X_scaled
+)
+
+plt.figure(figsize=(10,6))
+
+for cluster in set(labels):
+
+    mask = labels == cluster
+
+    if cluster == -1:
+
+        plt.scatter(
+            X_pca[mask,0],
+            X_pca[mask,1],
+            marker='x',
+            color='black',
+            label='Noise'
+        )
+
+    else:
+
+        plt.scatter(
+            X_pca[mask,0],
+            X_pca[mask,1],
+            label=f'Cluster {cluster}'
+        )
+
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.title("DBSCAN Clusters using PCA")
+plt.legend()
+
+plt.show()
+
+pca3 = PCA(
+    n_components=3
+)
+
+X_pca3 = pca3.fit_transform(
+    X_scaled
+)
+
+fig = plt.figure(
+    figsize=(10,8)
+)
+
+ax = fig.add_subplot(
+    111,
+    projection='3d'
+)
+
+ax.scatter(
+    X_pca3[:,0],
+    X_pca3[:,1],
+    X_pca3[:,2],
+    c=labels
+)
+
+plt.title(
+    "3D PCA Visualization"
+)
+
+plt.show()
+
+cluster_avg = df.groupby(
+    'Cluster'
+).mean(
+    numeric_only=True
+)
+
+cluster_avg.plot(
+    kind='bar',
+    figsize=(12,6)
+)
+
+plt.title(
+    "Average Feature Values by Cluster"
+)
+
+plt.show()
+
+Task 6
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.metrics import davies_bouldin_score
+
+kmeans = KMeans(
+    n_clusters=3,
+    random_state=42
+)
+
+k_labels = kmeans.fit_predict(
+    X_scaled
+)
+
+print(
+    "KMeans Silhouette Score:",
+    silhouette_score(
+        X_scaled,
+        k_labels
+    )
+)
+
+print(
+    "Davies-Bouldin Index:",
+    davies_bouldin_score(
+        X_scaled,
+        k_labels
+    )
+)
